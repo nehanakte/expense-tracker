@@ -86,10 +86,32 @@ function App() {
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Other");
+  const [mlPredicted, setMlPredicted] = useState(false);
   const todayStr = new Date().toISOString().split("T")[0];
   const [expenseDate, setExpenseDate] = useState(todayStr);
   const [subTitle, setSubTitle] = useState("");
   const [subAmount, setSubAmount] = useState("");
+
+  // 🤖 ML auto-categorize
+  const predictCategory = async (expenseTitle) => {
+    if (!expenseTitle || expenseTitle.length < 3) {
+      setMlPredicted(false);
+      return;
+    }
+    try {
+      const response = await fetch("https://web-production-70a6c.up.railway.app/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: expenseTitle.toLowerCase() }),
+      });
+      const data = await response.json();
+      setCategory(data.category);
+      setMlPredicted(true);
+    } catch (err) {
+      setMlPredicted(false);
+      console.log("ML API not available");
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -151,7 +173,11 @@ function App() {
     const { data, error } = await supabase.from("expenses").insert([newExp]).select();
     if (error) { alert("Error: " + error.message); return; }
     setExpenses([data[0], ...expenses]);
-    setTitle(""); setAmount(""); setCategory("Other"); setExpenseDate(todayStr);
+    setTitle("");
+    setAmount("");
+    setCategory("Other");
+    setMlPredicted(false);
+    setExpenseDate(todayStr);
   };
 
   const addSub = async () => {
@@ -296,9 +322,12 @@ function App() {
       <h2>➕ Add Expense</h2>
       <form onSubmit={addExpense}>
         <input
-          placeholder="Title"
+          placeholder="Title (e.g. Uber, Zomato, Netflix)"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            predictCategory(e.target.value);
+          }}
         />
         <input
           type="number"
@@ -306,9 +335,26 @@ function App() {
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
-        <select value={category} onChange={(e) => setCategory(e.target.value)}>
+        <select
+          value={category}
+          onChange={(e) => {
+            setCategory(e.target.value);
+            setMlPredicted(false);
+          }}
+        >
           {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
         </select>
+
+        {/* ML prediction badge */}
+        {mlPredicted && (
+          <p style={{
+            fontSize: 12, color: "#667eea",
+            margin: "2px 0 8px", fontStyle: "italic"
+          }}>
+            ✨ Category auto-predicted by ML model
+          </p>
+        )}
+
         <input
           type="date"
           value={expenseDate}
